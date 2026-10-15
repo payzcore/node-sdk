@@ -2,7 +2,7 @@
 
 Official Node.js SDK for the [PayzCore](https://payzcore.com) blockchain monitoring API.
 
-Monitor incoming stablecoin transfers (USDT, USDC) across multiple chains (TRC20, BEP20, ERC20, Polygon, Arbitrum) with typed methods and automatic webhook verification.
+Monitor incoming stablecoin transfers (USDT, USDC) across multiple networks (TRC20, BEP20, ERC20, Polygon, Arbitrum) with typed methods and automatic webhook verification.
 
 ## Important
 
@@ -79,7 +79,7 @@ console.log(p.availableNetworks)  // [{ network: 'TRC20', name: 'Tron', tokens: 
 const payz = new PayzCore('pk_live_xxx', {
   baseUrl: 'https://api.payzcore.com', // default
   timeout: 30000,                       // default 30s
-  maxRetries: 2,                        // default 2 (retries on 5xx/network errors)
+  maxRetries: 2,                        // default 2 (5xx/network errors; POST only with externalOrderId)
 })
 ```
 
@@ -119,11 +119,15 @@ const { payment } = await payz.payments.create({
 ### List
 
 ```typescript
-const { payments } = await payz.payments.list({
+const { payments, pagination } = await payz.payments.list({
   status: 'paid', // optional filter
   limit: 20,      // optional, max 100
   offset: 0,      // optional
 })
+// pagination?.hasMore → true if there is another page
+
+// Webhook fallback: poll payments updated since your last check
+const { payments: changed } = await payz.payments.list({ updatedAfter: '2026-10-15T00:00:00Z' })
 ```
 
 ### Get
@@ -163,6 +167,7 @@ const { project } = await admin.projects.create({
 })
 
 const { projects } = await admin.projects.list()
+// projects[].apiKeyPrefix — full keys are never listed
 ```
 
 ## Webhook Verification
@@ -214,7 +219,7 @@ In dedicated address mode, you can specify which static address to assign to a c
 
 ## Error Handling
 
-All errors extend `PayzCoreError` with `status`, `code`, and optional `details`:
+All errors extend `PayzCoreError` with `status`, `code` and `message`:
 
 ```typescript
 import { PayzCoreError, RateLimitError, ValidationError } from '@payzcore/node'
@@ -223,10 +228,11 @@ try {
   await payz.payments.create({ ... })
 } catch (err) {
   if (err instanceof RateLimitError) {
-    console.log(err.retryAfter) // Unix timestamp
-    console.log(err.isDaily)    // true if daily plan limit
+    // retryAfter is a Unix timestamp (seconds), not a duration
+    const waitSeconds = Math.max(0, (err.retryAfter ?? 0) - Math.floor(Date.now() / 1000))
+    console.log(waitSeconds, err.isDaily) // isDaily: true if daily plan limit
   } else if (err instanceof ValidationError) {
-    console.log(err.details)    // field-level errors
+    console.log(err.message)    // e.g. 'Invalid request body'
   } else if (err instanceof PayzCoreError) {
     console.log(err.status, err.message)
   }
@@ -238,11 +244,11 @@ try {
 | Class | Status | When |
 |-------|--------|------|
 | `AuthenticationError` | 401 | Invalid/missing API key |
-| `ForbiddenError` | 403 | Project deactivated |
+| `ForbiddenError` | 403 | Project deactivated, account suspended or no longer active |
 | `NotFoundError` | 404 | Payment/resource not found |
 | `ValidationError` | 400 | Invalid request body |
 | `RateLimitError` | 429 | Rate limit or daily plan limit exceeded |
-| `IdempotencyError` | 409 | `external_order_id` reused with different `external_ref` |
+| `IdempotencyError` | 409 | Any conflict: `external_order_id` reused with a different `external_ref` or amount, payment no longer pending, tx hash already used |
 | `WebhookSignatureError` | — | Invalid webhook signature |
 
 ## See Also

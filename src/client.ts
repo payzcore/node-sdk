@@ -33,7 +33,7 @@ export class HttpClient {
     const url = `${this.baseUrl}${path}`
     const bodyStr = body != null ? JSON.stringify(body) : ''
     const headers: Record<string, string> = {
-      'User-Agent': '@payzcore/node/1.1.7',
+      'User-Agent': '@payzcore/node/1.1.8',
     }
     if (body != null) {
       headers['Content-Type'] = 'application/json'
@@ -47,7 +47,14 @@ export class HttpClient {
 
     let lastError: Error | null = null
 
-    for (let attempt = 0; attempt <= this.maxRetries; attempt++) {
+    // A POST is only retried when it carries an idempotency key
+    // (external_order_id). Otherwise a retry after a lost response could
+    // create a second payment.
+    const hasIdempotencyKey =
+      typeof body === 'object' && body !== null && (body as Record<string, unknown>).external_order_id != null
+    const maxRetries = method === 'POST' && !hasIdempotencyKey ? 0 : this.maxRetries
+
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
       if (attempt > 0) {
         await sleep(RETRY_BASE_MS * 2 ** (attempt - 1))
       }

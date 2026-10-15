@@ -48,6 +48,7 @@ export type {
   PaymentListItem,
   ListPaymentsParams,
   ListPaymentsResponse,
+  Pagination,
   Transaction,
   PaymentDetail,
   GetPaymentResponse,

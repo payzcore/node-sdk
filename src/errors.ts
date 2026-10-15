@@ -46,6 +46,10 @@ export class ValidationError extends PayzCoreError {
 }
 
 export class RateLimitError extends PayzCoreError {
+  /**
+   * Absolute Unix timestamp (seconds) from `X-RateLimit-Reset` — not a duration.
+   * Wait time: `Math.max(0, err.retryAfter - Math.floor(Date.now() / 1000))`.
+   */
   readonly retryAfter: number | null
   readonly isDaily: boolean
 
@@ -57,8 +61,13 @@ export class RateLimitError extends PayzCoreError {
   }
 }
 
+/**
+ * Any HTTP 409 Conflict: external_order_id reused with a different external_ref
+ * or amount, cancelling a payment that is no longer pending, a tx hash already
+ * used, etc. `message` has the exact reason from the API.
+ */
 export class IdempotencyError extends PayzCoreError {
-  constructor(message = 'external_order_id already used with a different external_ref') {
+  constructor(message = 'Conflict') {
     super(message, 409, 'idempotency_error')
     this.name = 'IdempotencyError'
   }

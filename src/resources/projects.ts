@@ -22,7 +22,8 @@ function mapProjectListItem(raw: Record<string, unknown>) {
     id: raw.id,
     name: raw.name,
     slug: raw.slug,
-    apiKey: raw.api_key,
+    // The list endpoint never returns full keys, only a prefix
+    apiKeyPrefix: raw.api_key_prefix ?? null,
     webhookUrl: raw.webhook_url,
     isActive: raw.is_active,
     createdAt: raw.created_at,

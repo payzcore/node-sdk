@@ -27,7 +27,11 @@ export interface PayzCoreOptions {
   baseUrl?: string
   /** Request timeout in ms. Default: 30000 */
   timeout?: number
-  /** Max retries on 5xx/network errors. Default: 2 */
+  /**
+   * Max retries on 5xx/network errors. Default: 2.
+   * POST requests are only retried when they carry `externalOrderId`
+   * (idempotency key), so a retry can never create a duplicate payment.
+   */
   maxRetries?: number
   /** Use master key auth (x-master-key header). Default: false */
   masterKey?: boolean
@@ -45,7 +49,7 @@ export interface CreatePaymentParams {
   externalOrderId?: string
   /** Pre-assign a specific static address for this customer (dedicated mode only) */
   address?: string
-  /** Expiry in seconds (300–86400). Default: 3600 */
+  /** Expiry in seconds (300–86400). Default: the project's payment expiry setting (60 min unless changed) */
   expiresIn?: number
   metadata?: Record<string, unknown>
 }
@@ -54,6 +58,10 @@ export interface AvailableNetwork {
   network: Network
   name: string
   tokens: Token[]
+  /** Blocks required before a transfer counts as confirmed */
+  confirmations?: number
+  /** Block explorer base URL */
+  explorer?: string
 }
 
 export interface Payment {
@@ -84,6 +92,7 @@ export interface Payment {
 
 export interface CreatePaymentResponse {
   success: true
+  /** True when an existing pending payment was returned instead of a new one */
   existing: boolean
   payment: Payment
 }
@@ -107,13 +116,26 @@ export interface PaymentListItem {
 
 export interface ListPaymentsParams {
   status?: PaymentStatus
+  /** 1–100. Default: 50 */
   limit?: number
   offset?: number
+  /** ISO 8601. Only payments created after this time. */
+  createdAfter?: string
+  /** ISO 8601. Only payments updated after this time (oldest first). Useful as a webhook fallback poll. */
+  updatedAfter?: string
+}
+
+export interface Pagination {
+  total: number
+  limit: number
+  offset: number
+  hasMore: boolean
 }
 
 export interface ListPaymentsResponse {
   success: true
   payments: PaymentListItem[]
+  pagination?: Pagination
 }
 
 export interface Transaction {
@@ -156,6 +178,7 @@ export interface PaymentDetail {
   token: string | null
   txHash: string | null
   expiresAt: string
+  paidAt: string | null
   transactions: Transaction[]
   /** True when payment was created without a network. Customer must select on the payment page. */
   awaitingNetwork?: boolean
@@ -194,7 +217,8 @@ export interface ProjectListItem {
   id: string
   name: string
   slug: string
-  apiKey: string
+  /** First characters of the API key. The list endpoint never returns full keys. */
+  apiKeyPrefix: string | null
   webhookUrl: string | null
   isActive: boolean
   createdAt: string
@@ -212,9 +236,11 @@ export interface WebhookPayload {
   paymentId: string
   externalRef: string
   externalOrderId?: string | null
-  network: Network
-  token: string
-  address: string
+  /** null when the customer never selected a network (e.g. cancelled/expired before selection) */
+  network: Network | null
+  token: string | null
+  /** null when the customer never selected a network */
+  address: string | null
   expectedAmount: string
   paidAmount: string
   txHash: string | null
@@ -223,6 +249,8 @@ export interface WebhookPayload {
   paidAt: string | null
   metadata: Record<string, unknown>
   timestamp: string
+  /** Only present (`true`) when funds arrived after the payment had expired. */
+  latePayment?: boolean
   /** Buyer email. Only present for payments created through payment links. */
   buyerEmail?: string | null
   /** Buyer name. Only present for payments created through payment links. */
@@ -239,6 +267,7 @@ export interface WebhookPayload {
 
 export interface ApiErrorBody {
   error: string
+  /** Not sent by the current API; kept for backward compatibility. */
   details?: Array<{ code: string; path?: string[]; message: string }>
   limit?: number
   plan?: string

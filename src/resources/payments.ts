@@ -32,6 +32,8 @@ function mapPayment(raw: Record<string, unknown>) {
       network: n.network,
       name: n.name,
       tokens: n.tokens,
+      confirmations: n.confirmations,
+      explorer: n.explorer,
     })),
   }
 }
@@ -49,8 +51,9 @@ function mapPaymentListItem(raw: Record<string, unknown>) {
     status: raw.status,
     txHash: raw.tx_hash,
     expiresAt: raw.expires_at,
-    paidAt: raw.paid_at,
+    paidAt: raw.paid_at ?? null,
     createdAt: raw.created_at,
+    updatedAt: raw.updated_at,
   }
 }
 
@@ -66,6 +69,7 @@ function mapPaymentDetail(raw: Record<string, unknown>) {
     token: raw.token ?? null,
     txHash: raw.tx_hash,
     expiresAt: raw.expires_at,
+    paidAt: raw.paid_at ?? null,
     awaitingNetwork: raw.awaiting_network,
     transactions: (txs ?? []).map((t) => ({
       txHash: t.tx_hash,
@@ -96,7 +100,8 @@ export class Payments {
     const raw = await this.client.post<Record<string, unknown>>('/v1/payments', body)
     return {
       success: true,
-      existing: raw.existing as boolean,
+      // The API only includes `existing` when an existing payment is returned
+      existing: raw.existing === true,
       payment: mapPayment(raw.payment as Record<string, unknown>),
     } as CreatePaymentResponse
   }
@@ -106,15 +111,26 @@ export class Payments {
     if (params.status) searchParams.set('status', params.status)
     if (params.limit != null) searchParams.set('limit', String(params.limit))
     if (params.offset != null) searchParams.set('offset', String(params.offset))
+    if (params.createdAfter) searchParams.set('created_after', params.createdAfter)
+    if (params.updatedAfter) searchParams.set('updated_after', params.updatedAfter)
 
     const qs = searchParams.toString()
     const path = `/v1/payments${qs ? `?${qs}` : ''}`
     const raw = await this.client.get<Record<string, unknown>>(path)
     const payments = raw.payments as Array<Record<string, unknown>>
+    const pagination = raw.pagination as Record<string, unknown> | undefined
 
     return {
       success: true,
       payments: payments.map(mapPaymentListItem),
+      pagination: pagination
+        ? {
+            total: pagination.total,
+            limit: pagination.limit,
+            offset: pagination.offset,
+            hasMore: pagination.has_more === true,
+          }
+        : undefined,
     } as ListPaymentsResponse
   }
 

@@ -77,9 +77,9 @@ export function parseWebhook(body: string): WebhookPayload {
     paymentId: raw.payment_id as string,
     externalRef: raw.external_ref as string,
     externalOrderId: (raw.external_order_id as string | null) ?? undefined,
-    network: raw.network as Network,
-    token: (raw.token as string) ?? 'USDT',
-    address: raw.address as string,
+    network: (raw.network as Network | null) ?? null,
+    token: (raw.token as string | null) ?? null,
+    address: (raw.address as string | null) ?? null,
     expectedAmount: raw.expected_amount as string,
     paidAmount: raw.paid_amount as string,
     txHash: raw.tx_hash as string | null,
@@ -87,6 +87,8 @@ export function parseWebhook(body: string): WebhookPayload {
     paidAt: raw.paid_at as string | null,
     metadata: (raw.metadata as Record<string, unknown>) ?? {},
     timestamp: raw.timestamp as string,
+    // Only present (true) when funds arrived after the payment had expired
+    ...(raw.late_payment === true ? { latePayment: true } : {}),
     // Payment link buyer fields (only present for payment link payments)
     buyerEmail: raw.buyer_email as string | null | undefined,
     buyerName: raw.buyer_name as string | null | undefined,
